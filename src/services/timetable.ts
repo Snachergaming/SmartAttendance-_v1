@@ -40,7 +40,7 @@ export async function getTimetableSlots(filters?: {
   return data;
 }
 
-export async function getTodaySlots(facultyId?: string) {
+export async function getTodaySlots(facultyId?: string, facultyProfileId?: string) {
   const now = new Date();
   const today = DAYS_OF_WEEK[now.getDay()];
   
@@ -65,16 +65,21 @@ export async function getTodaySlots(facultyId?: string) {
     .from('timetable_slots')
     .select(`
       *,
-      faculty (id, profiles (name)),
+      faculty (id, profile_id, profiles (name)),
       classes (id, name, division),
-      subjects (id, name, subject_code)
+      subjects (id, name, subject_code),
+      batches (id, name)
     `)
     .eq('day_of_week', today)
     .lte('valid_from', todayDate)
     .gte('valid_to', todayDate)
     .order('start_time', { ascending: true });
 
-  if (facultyId) query = query.eq('faculty_id', facultyId);
+  if (facultyId) {
+    query = query.eq('faculty_id', facultyId);
+  } else if (facultyProfileId) {
+    query = query.eq('faculty.profile_id', facultyProfileId);
+  }
 
   // If it's a half day, filter by time
   if (holiday && holiday.holiday_type === 'HALF_DAY') {
@@ -107,21 +112,31 @@ async function ensureAllocation(facultyId: string, classId: string, subjectId: s
 }
 
 export async function createTimetableSlot(slot: Omit<TimetableSlot, 'id' | 'created_at'>) {
+  if (!slot.class_id || !slot.subject_id || !slot.faculty_id) {
+    throw new Error('Class, subject, and faculty IDs are required.');
+  }
+
+  const normalizedSlot = {
+    ...slot,
+    batch_id: slot.batch_id && slot.batch_id !== 'none' ? slot.batch_id : null,
+    room_no: slot.room_no?.trim() || null,
+  };
+
   // Check for duplicate slot (same class, day, time)
   // Modified to support Batch vs Whole Class logic
   const { data: existingSlots } = await supabase
     .from('timetable_slots')
     .select('id, batch_id')
-    .eq('class_id', slot.class_id)
-    .eq('day_of_week', slot.day_of_week)
-    .eq('start_time', slot.start_time)
-    .lte('valid_from', slot.valid_to)
-    .gte('valid_to', slot.valid_from);
+    .eq('class_id', normalizedSlot.class_id)
+    .eq('day_of_week', normalizedSlot.day_of_week)
+    .eq('start_time', normalizedSlot.start_time)
+    .lte('valid_from', normalizedSlot.valid_to)
+    .gte('valid_to', normalizedSlot.valid_from);
 
   if (existingSlots && existingSlots.length > 0) {
     for (const existing of existingSlots) {
        // If validating a "Whole Class" slot (batch_id is null/empty)
-       if (!slot.batch_id) {
+       if (!normalizedSlot.batch_id) {
            throw new Error(`A timetable slot already exists for this class at this time.`);
        }
 
@@ -132,7 +147,7 @@ export async function createTimetableSlot(slot: Omit<TimetableSlot, 'id' | 'crea
        }
 
        // 2. Conflict if same batch is already assigned
-       if (existing.batch_id === slot.batch_id) {
+       if (existing.batch_id === normalizedSlot.batch_id) {
            throw new Error(`This batch is already assigned at this time.`);
        }
        
@@ -144,11 +159,11 @@ export async function createTimetableSlot(slot: Omit<TimetableSlot, 'id' | 'crea
   const { data: facultyBusy } = await supabase
     .from('timetable_slots')
     .select('id')
-    .eq('faculty_id', slot.faculty_id)
-    .eq('day_of_week', slot.day_of_week)
-    .eq('start_time', slot.start_time)
-    .lte('valid_from', slot.valid_to)
-    .gte('valid_to', slot.valid_from)
+    .eq('faculty_id', normalizedSlot.faculty_id)
+    .eq('day_of_week', normalizedSlot.day_of_week)
+    .eq('start_time', normalizedSlot.start_time)
+    .lte('valid_from', normalizedSlot.valid_to)
+    .gte('valid_to', normalizedSlot.valid_from)
     .maybeSingle();
 
   if (facultyBusy) {
@@ -157,14 +172,14 @@ export async function createTimetableSlot(slot: Omit<TimetableSlot, 'id' | 'crea
 
   const { data, error } = await supabase
     .from('timetable_slots')
-    .insert(slot)
+    .insert(normalizedSlot)
     .select()
     .single();
 
   if (error) throw error;
 
   // Auto-create subject allocation
-  await ensureAllocation(slot.faculty_id, slot.class_id, slot.subject_id);
+  await ensureAllocation(normalizedSlot.faculty_id, normalizedSlot.class_id, normalizedSlot.subject_id);
 
   return data;
 }

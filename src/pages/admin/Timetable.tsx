@@ -120,11 +120,21 @@ const AdminTimetablePage: React.FC = () => {
 
   const handleAddSlot = async () => {
     try {
+      if (!formData.class_id || !formData.subject_id || !formData.faculty_id) {
+        throw new Error('Class, subject, and faculty are required.');
+      }
+
+      if (!formData.day_of_week || !formData.start_time) {
+        throw new Error('Day and start time are required.');
+      }
+
       // Convert empty or 'none' batch_id to null to avoid UUID errors
       const slotData = {
         ...formData,
-        batch_id: (formData.batch_id && formData.batch_id !== 'none') ? formData.batch_id : null
+        batch_id: (formData.batch_id && formData.batch_id !== 'none') ? formData.batch_id : null,
+        room_no: formData.room_no?.trim() || null,
       };
+
       await createTimetableSlot(slotData);
       toast({ title: 'Success', description: 'Timetable slot created' });
       setIsAddDialogOpen(false);

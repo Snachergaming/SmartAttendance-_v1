@@ -47,7 +47,7 @@ const FacultyTodayPage: React.FC = () => {
           .from('faculty')
           .select('id')
           .eq('profile_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (data) {
           setFacultyId(data.id);
@@ -60,17 +60,19 @@ const FacultyTodayPage: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!facultyId) return;
+    if (!facultyId && !user?.id) return;
 
     async function fetchTodayData() {
       try {
         const today = new Date().toISOString().split('T')[0];
         
+        const profileId = user?.id;
+
         // Fetch regular slots and substitution assignments
         const [slots, sessions, substitutions] = await Promise.all([
-          getTodaySlots(facultyId!),
-          getAttendanceSessions({ faculty_id: facultyId!, date: today }),
-          supabase
+          getTodaySlots(facultyId, profileId),
+          facultyId ? getAttendanceSessions({ faculty_id: facultyId, date: today }) : Promise.resolve([]),
+          facultyId ? supabase
             .from('substitution_assignments')
             .select(`
               *,
@@ -78,8 +80,9 @@ const FacultyTodayPage: React.FC = () => {
               subjects (id, name, subject_code),
               faculty!substitution_assignments_src_faculty_id_fkey (profiles (name))
             `)
-            .eq('sub_faculty_id', facultyId!)
-            .eq('date', today),
+            .eq('sub_faculty_id', facultyId)
+            .eq('date', today)
+            : Promise.resolve({ data: [] }),
         ]);
 
         const completedSlots = new Map(
@@ -146,7 +149,10 @@ const FacultyTodayPage: React.FC = () => {
         .filter((slot: LectureSlot) => slot.status !== 'missed'); 
 
         // Add substitution assignments
-        const subData = substitutions.data || [];
+        const subData = Array.isArray(substitutions)
+          ? substitutions
+          : substitutions.data || [];
+
         subData.forEach((sub: any) => {
           const sessionId = completedSlots.get(sub.start_time);
           const isCompleted = !!sessionId;

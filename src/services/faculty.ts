@@ -107,27 +107,29 @@ export async function updateFaculty(id: string, updates: Partial<Pick<Faculty, '
 }
 
 export async function updateFacultyPassword(profile_id: string, new_password: string) {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  const session = sessionData?.session;
+  try {
+    const { data, error } = await supabase.functions.invoke('update-faculty-password', {
+      body: {
+        profile_id,
+        new_password,
+      },
+    });
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    apikey: SUPABASE_ANON_KEY,
-  };
-
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
+    if (error) {
+      console.error('Edge function error details:', error);
+      throw new Error(`Edge function error: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
+    }
+    
+    if (data?.error) {
+      console.error('Response error:', data.error);
+      throw new Error(data.error);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('updateFacultyPassword error:', error);
+    throw error;
   }
-
-  const response = await supabase.functions.invoke('update-faculty-password', {
-    body: JSON.stringify({ profile_id, new_password }),
-    headers,
-  });
-
-  if (response.error) throw response.error;
-  if (response.data?.error) throw new Error(response.data.error);
-  return response.data;
 }
 
 export async function updateFacultyPasswordsToMobile() {
@@ -161,20 +163,19 @@ export async function updateFacultyPasswordsToMobile() {
         const mobile = faculty.profiles?.mobile;
         if (!mobile) continue;
 
-        // Use the create-faculty edge function to update password
-        // We'll need to pass the profile_id and new password
-        const response = await supabase.functions.invoke('update-faculty-password', {
-          body: JSON.stringify({
+        // Use the update-faculty-password edge function to update password
+        const { data, error } = await supabase.functions.invoke('update-faculty-password', {
+          body: {
             profile_id: faculty.profile_id,
             new_password: mobile,
-          }),
-          headers: {
-            'Content-Type': 'application/json',
           },
         });
 
-        if (response.error) {
-          console.error(`Failed to update password for ${faculty.profiles?.name}:`, response.error);
+        if (error) {
+          console.error(`Failed to update password for ${faculty.profiles?.name}:`, error);
+          failed++;
+        } else if (data?.error) {
+          console.error(`Failed to update password for ${faculty.profiles?.name}:`, data.error);
           failed++;
         } else {
           success++;

@@ -69,11 +69,15 @@ const FacultyDashboardPage: React.FC = () => {
           .from('faculty')
           .select('id')
           .eq('profile_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (facultyData) {
           setFacultyId(facultyData.id);
           await fetchAllData(facultyData.id, user.id);
+        } else if (user.id) {
+          // Fallback: if faculty id lookup fails, still try profile-based today slot fetch
+          await fetchTodayData(undefined, user.id);
+          await fetchActivity(user.id);
         }
       } catch (error) {
         console.error('Error fetching profile:', error);
@@ -123,7 +127,7 @@ const FacultyDashboardPage: React.FC = () => {
 
   const fetchAllData = async (fId: string, profileId?: string) => {
     await Promise.all([
-      fetchTodayData(fId),
+      fetchTodayData(fId, profileId),
       fetchAllocations(fId),
       fetchAssignedClass(fId),
       fetchLeavesData(fId),
@@ -161,9 +165,9 @@ const FacultyDashboardPage: React.FC = () => {
     }
   };
 
-  const fetchTodayData = async (fId: string) => {
+  const fetchTodayData = async (fId: string, profileId?: string) => {
     try {
-      const slots = await getTodaySlots(fId);
+      const slots = await getTodaySlots(fId, profileId);
       const today = new Date().toISOString().split('T')[0];
 
       // Get today's attendance sessions for this faculty
