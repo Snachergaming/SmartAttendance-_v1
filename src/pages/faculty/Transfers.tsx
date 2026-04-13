@@ -1,0 +1,623 @@
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { ArrowRightLeft, Plus, Clock, CheckCircle, XCircle, User, Calendar, BookOpen } from 'lucide-react';
+import PageShell from '@/components/layout/PageShell';
+import DataTable from '@/components/ui/DataTable';
+import StatusBadge from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  getLectureTransfers,
+  getMyIncomingTransfers,
+  getMyOutgoingTransfers,
+  createTransferRequest,
+  respondToTransfer,
+  cancelTransfer,
+  getAvailableFacultyForTransfer,
+  type LectureTransfer,
+} from '@/services/transfers';
+import { getTodaySlots } from '@/services/timetable';
+interface AvailableFaculty {
+  id: string;
+  profiles?: { name: string }[] | { name: string } | null;
+}
+
+interface TimetableSlot {
+  id: string;
+  start_time: string;
+  day_of_week: string;
+  class_id?: string;
+  subject_id?: string;
+  classes?: { id?: string; name: string; division: string };
+  subjects?: { id?: string; name: string; subject_code: string };
+}
+
+const FacultyTransfersPage: React.FC = () => {
+  const { user } = useAuth();
+  const [facultyId, setFacultyId] = useState<string | null>(null);
+  const [incomingTransfers, setIncomingTransfers] = useState<LectureTransfer[]>([]);
+  const [outgoingTransfers, setOutgoingTransfers] = useState<LectureTransfer[]>([]);
+  const [mySlots, setMySlots] = useState<TimetableSlot[]>([]);
+  const [availableFaculty, setAvailableFaculty] = useState<AvailableFaculty[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Transfer form state
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<TimetableSlot | null>(null);
+  const [selectedFaculty, setSelectedFaculty] = useState<string>('');
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reason, setReason] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [rawFaculty, setRawFaculty] = useState<AvailableFaculty[]>([]); // Store raw faculty list from DB
+
+  useEffect(() => {
+    async function fetchFacultyId() {
+      if (!user) return;
+
+      try {
+        const { data } = await supabase
+          .from('faculty')
+          .select('id')
+          .eq('profile_id', user.id)
+          .single();
+
+        if (data) {
+          setFacultyId(data.id);
+        }
+      } catch (error) {
+        console.error('Error fetching faculty:', error);
+      }
+    }
+    fetchFacultyId();
+  }, [user]);
+
+  // Fetch all faculty initially - Independent of current user status
+  useEffect(() => {
+    async function loadRawFaculty() {
+        const { data, error } = await supabase
+          .from('faculty')
+          .select(`id, profiles (name)`);
+          
+        if (error) {
+            console.error("Error loading faculty list:", error);
+            // Fallback or retry logic could go here
+            return;
+        }
+
+        if(data) {
+            setRawFaculty(data);
+        }
+    }
+    loadRawFaculty();
+  }, []); // Run on mount
+
+  // Filter faculty based on ID and Search Query
+  useEffect(() => {
+     let filtered = rawFaculty;
+
+     // 1. Filter out self
+     if (facultyId) {
+         filtered = filtered.filter(f => f.id !== facultyId);
+     }
+
+     // 2. Filter by Search Query
+     if (searchQuery) {
+         const lower = searchQuery.toLowerCase();
+         filtered = filtered.filter(f => {
+             const p = f.profiles;
+             // Handle potential array or object structure for profiles
+             const name = Array.isArray(p) ? p[0]?.name : p?.name;
+             return name ? name.toLowerCase().includes(lower) : false;
+         });
+     }
+     
+     setAvailableFaculty(filtered);
+  }, [searchQuery, rawFaculty, facultyId]);
+
+  const fetchTransfers = async () => {
+    if (!facultyId) return;
+    
+    try {
+      const [incoming, outgoing] = await Promise.all([
+        getMyIncomingTransfers(facultyId),
+        getMyOutgoingTransfers(facultyId),
+      ]);
+      setIncomingTransfers(incoming);
+      setOutgoingTransfers(outgoing);
+    } catch (error) {
+      console.error('Error fetching transfers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!facultyId) return;
+
+    fetchTransfers();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel('my-transfers')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lecture_transfers',
+      }, () => {
+        fetchTransfers();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [facultyId]);
+
+  const handleOpenCreateDialog = async () => {
+    if (!facultyId) return;
+
+    // Reset search query which will trigger the effect to reset available faculty
+    setSearchQuery('');
+    
+    try {
+      // Fetch my today's slots
+      const slots = await getTodaySlots(facultyId);
+
+      // Fetch completed sessions for today to filter them out
+      const now = new Date();
+      // Adjust for timezone to match getTodaySlots logic which uses local date
+      const offset = now.getTimezoneOffset();
+      const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+      const todayDate = localDate.toISOString().split('T')[0];
+
+      const { data: completedSessions } = await supabase
+        .from('attendance_sessions')
+        .select('class_id, subject_id, start_time')
+        .eq('faculty_id', facultyId)
+        .eq('date', todayDate);
+
+      const completedKeys = new Set(completedSessions?.map(s => {
+        const time = s.start_time.substring(0, 5);
+        return `${s.class_id}-${s.subject_id}-${time}`;
+      }) || []);
+
+      const validSlots = (slots || []).filter((slot: any) => {
+        const cId = slot.class_id || slot.classes?.id;
+        const sId = slot.subject_id || slot.subjects?.id;
+        const time = slot.start_time.substring(0, 5);
+        
+        if (!cId || !sId) return true; // keep if we can't identify
+        const key = `${cId}-${sId}-${time}`;
+        return !completedKeys.has(key);
+      });
+
+      setMySlots(validSlots);
+      setIsCreateDialogOpen(true);
+    } catch (error) {
+      console.error(error);
+      toast({ title: 'Error', description: 'Failed to load your slots', variant: 'destructive' });
+    }
+  };
+
+  const handleSlotSelect = async (slot: TimetableSlot) => {
+    setSelectedSlot(slot);
+    // Don't limit by availability anymore per request
+    // if (facultyId) {
+    //   try {
+    //     const available = await getAvailableFacultyForTransfer(slot.id, transferDate, facultyId);
+    //     setAvailableFaculty(available);
+    //   } catch (error) {
+    //     console.error('Error fetching available faculty:', error);
+    //   }
+    // }
+  };
+
+  const handleCreateTransfer = async () => {
+    if (!facultyId || !selectedSlot || !selectedFaculty) {
+      toast({ title: 'Error', description: 'Please select all required fields', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      await createTransferRequest({
+        from_faculty_id: facultyId,
+        to_faculty_id: selectedFaculty,
+        timetable_slot_id: selectedSlot.id,
+        date: transferDate,
+        reason,
+      });
+      toast({ title: 'Success', description: 'Transfer request sent' });
+      setIsCreateDialogOpen(false);
+      resetForm();
+      fetchTransfers();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to create transfer request', variant: 'destructive' });
+    }
+  };
+
+  const handleRespond = async (id: string, response: 'ACCEPTED' | 'REJECTED') => {
+    try {
+      await respondToTransfer(id, response);
+      toast({ title: 'Success', description: `Transfer ${response.toLowerCase()}` });
+      fetchTransfers();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to respond to transfer', variant: 'destructive' });
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    try {
+      await cancelTransfer(id);
+      toast({ title: 'Success', description: 'Transfer cancelled' });
+      fetchTransfers();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to cancel transfer', variant: 'destructive' });
+    }
+  };
+
+  const resetForm = () => {
+    setSelectedSlot(null);
+    setSelectedFaculty('');
+    setTransferDate(new Date().toISOString().split('T')[0]);
+    setReason('');
+    setSearchQuery('');
+    setAvailableFaculty(allFaculty); // Reset to full list instead of empty
+    setMySlots([]);
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'ACCEPTED': return 'success';
+      case 'REJECTED': return 'danger';
+      case 'PENDING': return 'warning';
+      case 'CANCELLED': return 'default';
+      default: return 'default';
+    }
+  };
+
+  const incomingColumns = [
+    {
+      key: 'from',
+      header: 'From Faculty',
+      render: (transfer: LectureTransfer) => (
+        <div className="flex items-center gap-2">
+          <User className="w-4 h-4 text-muted-foreground" />
+          <span>{transfer.from_faculty?.profiles?.name || '-'}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date & Time',
+      render: (transfer: LectureTransfer) => (
+        <div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <span>{new Date(transfer.date).toLocaleDateString()}</span>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {transfer.timetable_slots?.start_time}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'class',
+      header: 'Class',
+      render: (transfer: LectureTransfer) => (
+        <span>
+          {transfer.timetable_slots?.classes?.name} {transfer.timetable_slots?.classes?.division}
+        </span>
+      ),
+    },
+    {
+      key: 'subject',
+      header: 'Subject',
+      render: (transfer: LectureTransfer) => (
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-muted-foreground" />
+          <span>{transfer.timetable_slots?.subjects?.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (transfer: LectureTransfer) => (
+        <StatusBadge variant={getStatusBadgeVariant(transfer.status) as 'default' | 'success' | 'warning' | 'danger'}>
+          {transfer.status}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (transfer: LectureTransfer) => transfer.status === 'PENDING' && (
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleRespond(transfer.id, 'ACCEPTED')}
+            className="text-success hover:text-success"
+            title="Accept"
+          >
+            <CheckCircle className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleRespond(transfer.id, 'REJECTED')}
+            className="text-danger hover:text-danger"
+            title="Reject"
+          >
+            <XCircle className="w-4 h-4" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const outgoingColumns = [
+    {
+      key: 'to',
+      header: 'To Faculty',
+      render: (transfer: LectureTransfer) => (
+        <div className="flex items-center gap-2">
+          <User className="w-4 h-4 text-muted-foreground" />
+          <span>{transfer.to_faculty?.profiles?.name || '-'}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date & Time',
+      render: (transfer: LectureTransfer) => (
+        <div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <span>{new Date(transfer.date).toLocaleDateString()}</span>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {transfer.timetable_slots?.start_time}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'class',
+      header: 'Class',
+      render: (transfer: LectureTransfer) => (
+        <span>
+          {transfer.timetable_slots?.classes?.name} {transfer.timetable_slots?.classes?.division}
+        </span>
+      ),
+    },
+    {
+      key: 'subject',
+      header: 'Subject',
+      render: (transfer: LectureTransfer) => (
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-muted-foreground" />
+          <span>{transfer.timetable_slots?.subjects?.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (transfer: LectureTransfer) => (
+        <StatusBadge variant={getStatusBadgeVariant(transfer.status) as 'default' | 'success' | 'warning' | 'danger'}>
+          {transfer.status}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (transfer: LectureTransfer) => transfer.status === 'PENDING' && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleCancel(transfer.id)}
+          className="text-danger hover:text-danger"
+          title="Cancel"
+        >
+          <XCircle className="w-4 h-4" />
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <PageShell role="faculty">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">
+              Lecture Transfers
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Transfer your lectures to other faculty members
+            </p>
+          </div>
+          <Button onClick={handleOpenCreateDialog} className="btn-gradient">
+            <Plus className="w-4 h-4 mr-2" />
+            Request Transfer
+          </Button>
+        </div>
+
+        {/* Pending Incoming Requests Alert */}
+        {incomingTransfers.filter(t => t.status === 'PENDING').length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card p-4 rounded-xl border-l-4 border-l-warning"
+          >
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-warning" />
+              <div>
+                <p className="font-medium text-foreground">
+                  {incomingTransfers.filter(t => t.status === 'PENDING').length} pending transfer request(s)
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Other faculty members want to transfer their lectures to you
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        <Tabs defaultValue="incoming" className="w-full">
+          <TabsList className="w-full grid grid-cols-2 bg-white/5">
+            <TabsTrigger value="incoming" className="data-[state=active]:bg-primary/20">
+              <ArrowRightLeft className="w-4 h-4 mr-2" />
+              Incoming ({incomingTransfers.length})
+            </TabsTrigger>
+            <TabsTrigger value="outgoing" className="data-[state=active]:bg-primary/20">
+              <ArrowRightLeft className="w-4 h-4 mr-2 rotate-180" />
+              Outgoing ({outgoingTransfers.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="incoming" className="mt-6">
+            <DataTable
+              columns={incomingColumns}
+              data={incomingTransfers}
+              keyExtractor={(transfer) => transfer.id}
+              isLoading={loading}
+              emptyMessage="No incoming transfer requests"
+            />
+          </TabsContent>
+
+          <TabsContent value="outgoing" className="mt-6">
+            <DataTable
+              columns={outgoingColumns}
+              data={outgoingTransfers}
+              keyExtractor={(transfer) => transfer.id}
+              isLoading={loading}
+              emptyMessage="No outgoing transfer requests"
+            />
+          </TabsContent>
+        </Tabs>
+
+        {/* Create Transfer Dialog */}
+        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) resetForm();
+        }}>
+          <DialogContent className="glass-card border-border/50 max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Request Lecture Transfer</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={transferDate}
+                  onChange={(e) => setTransferDate(e.target.value)}
+                  className="bg-white/5 border-border/50 mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Select Your Slot to Transfer</Label>
+                {mySlots.length === 0 ? (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    No slots found for today. Try selecting a different date.
+                  </p>
+                ) : (
+                  <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
+                    {mySlots.map(slot => (
+                      <div
+                        key={slot.id}
+                        onClick={() => handleSlotSelect(slot)}
+                        className={`p-3 rounded-lg cursor-pointer transition-all ${
+                          selectedSlot?.id === slot.id
+                            ? 'bg-primary/20 border border-primary/50'
+                            : 'bg-white/5 border border-border/30 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex justify-between">
+                          <span className="font-medium">{slot.start_time}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {slot.classes?.name} {slot.classes?.division}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {slot.subjects?.name} ({slot.subjects?.subject_code})
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedSlot && (
+                <div className="space-y-4">
+                    <Label>Select Faculty to Transfer To</Label>
+                    
+                    <div className="space-y-2">
+                        <Input
+                        type="search" 
+                        placeholder="Search faculty..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="bg-white/5 border-border/50"
+                        />
+                        
+                        <Select value={selectedFaculty} onValueChange={setSelectedFaculty}>
+                        <SelectTrigger className="bg-white/5 border-border/50">
+                            <SelectValue placeholder={availableFaculty.length === 0 ? "No faculty found" : "Select from list"} />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px]">
+                            {availableFaculty.length === 0 ? (
+                                <div className="p-2 text-sm text-center text-muted-foreground">No matches found</div>
+                            ) : (
+                                availableFaculty.map(f => {
+                                    const name = Array.isArray(f.profiles) ? f.profiles[0]?.name : f.profiles?.name;
+                                    return (
+                                    <SelectItem key={f.id} value={f.id}>{name}</SelectItem>
+                                    );
+                                })
+                            )}
+                        </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+              )}
+
+              <div>
+                <Label>Reason (Optional)</Label>
+                <Textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Why do you want to transfer this lecture?"
+                  className="bg-white/5 border-border/50 mt-1"
+                />
+              </div>
+
+              <Button
+                onClick={handleCreateTransfer}
+                disabled={!selectedSlot || !selectedFaculty}
+                className="w-full btn-gradient"
+              >
+                Send Transfer Request
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </motion.div>
+    </PageShell>
+  );
+};
+
+export default FacultyTransfersPage;

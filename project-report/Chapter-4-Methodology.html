@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+/* Reset */
+body { font-family: 'Times New Roman', serif; line-height: 1.5; text-align: justify; }
+h1, h2, h3 { text-align: center; }
+p { margin-bottom: 1em; }
+table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+th, td { border: 1px solid #000; padding: 5px; }
+.diagram-wrap { border: none !important; margin: 20px auto !important; width: 100% !important; }
+</style>
+</head>
+<body>
+<h1>Chapter–4 Methodology / Approach</h1>
+<h3>4.1 System Overview</h3>
+<p>The system comprises three main interconnected components:</p>
+<ol>
+<li><strong>Portable Device:</strong> Handheld unit carried by faculty to class. It serves as the capture point.
+<ul>
+<li><em>Hardware:</em> ESP32 Controller, R307 Fingerprint Sensor, 0.96&quot; OLED Display, Rechargeable Battery.</li>
+<li><em>Identity:</em> Each device has a burned-in, unique <code>device_code</code>.</li>
+</ul>
+</li>
+<li><strong>Central Cloud (Supabase):</strong> The brain of the system.
+<ul>
+<li>Stores all Master Data (Students, Subjects) and Transaction Data (Sessions, Logs).</li>
+<li>Runs &quot;Edge Functions&quot; (Serverless API) to handle complex logic securely.</li>
+</ul>
+</li>
+<li><strong>Faculty App (Web):</strong> The control center.
+<ul>
+<li>Allows faculty to log in, select their current class/subject, and &quot;Start Session&quot; on a specific device code.</li>
+</ul>
+</li>
+</ol>
+<h3>4.2 Device Logic &amp; Workflow</h3>
+<p>The device operates in a continuous state machine loop:</p>
+<ol>
+<li><strong>Boot:</strong> Connects to Wi-Fi and displays its <code>device_code</code>.</li>
+<li><strong>Poll:</strong> Periodically checks the Cloud for an &quot;Active Session&quot; linked to its ID.</li>
+<li><strong>Session Active:</strong> Once a session starts, it locks to that Class/Subject. The OLED displays &quot;Marketing: [Subject]&quot;.</li>
+<li><strong>Scan &amp; Capture:</strong>
+<ul>
+<li>Student places finger.</li>
+<li>Device captures image -&gt; extracts Template.</li>
+<li>Device verifies <strong>Context Rules</strong> locally (Is this batch allowed? Duplicate scan?).</li>
+</ul>
+</li>
+<li><strong>Sync:</strong>
+<ul>
+<li><strong>Online:</strong> Pushes data immediately to Cloud Edge Function.</li>
+<li><strong>Offline:</strong> Saves scan to onboard memory (Queue) with timestamp. Pushes when Wi-Fi returns.</li>
+</ul>
+</li>
+</ol>
+<h3>4.3 Offline-First &amp; Sync Strategy</h3>
+<p>To ensure robustness in campus environments with spotty Wi-Fi:</p>
+<ul>
+<li><strong>Local Queue:</strong> The ESP32 maintains a circular buffer of attendance records.</li>
+<li><strong>Deferred Matching:</strong> If the server cannot be reached, the scan is stored. Upon reconnection, the queue is flushed in batches.</li>
+<li><strong>Integrity Check:</strong> Records are only deleted from the device queue after receiving a positive <code>200 OK</code> acknowledgement from the server. This guarantees zero data loss.</li>
+</ul>
+<h3>4.4 AI &amp; AIML Justification</h3>
+<p>This project meets AIML diploma requirements through:</p>
+<ol>
+<li><strong>Biometric Pattern Recognition:</strong> The core sensor performs feature extraction (minutiae points) and template matching, a fundamental pattern recognition task.</li>
+<li><strong>Context-Aware Rule-Based Intelligence:</strong> The device implements a &quot;Classical AI&quot; rule engine (If-Then logic) to make autonomous decisions:
+<ul>
+<li><em>If</em> Current Time &gt; End Time → Reject.</li>
+<li><em>If</em> Roll No is not in Batch A → Reject.</li>
+<li><em>If</em> Student already marked → Reject.</li>
+</ul>
+</li>
+<li><strong>Behavioral Analysis (Future/Server-side):</strong> collected timestamp data can be analyzed to detect anomalies, such as &quot;Rapid Fire Scans&quot; indicating a potential bypass attempt.</li>
+</ol>
+<hr />
+
+</body>
+</html>

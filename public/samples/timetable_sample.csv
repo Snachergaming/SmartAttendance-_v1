@@ -1,0 +1,14 @@
+faculty_email,day_of_week,start_time,class_name,division,subject_code,room_no,valid_from,valid_to
+amar.dighe@ritppune.com,,09:00,TY AIML,A,300212,101,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Monday,10:00,TY AIML,A,300212,101,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Monday,11:00,TY AIML,A,300212,102,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Tuesday,09:00,TY AIML,A,300212,101,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Tuesday,10:00,TY AIML,A,300212,103,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Tuesday,11:00,TY AIML,A,300212,102,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Wednesday,09:00,TY AIML,A,300212,LAB1,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Wednesday,11:00,TY AIML,A,300212,LAB1,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Thursday,09:00,TY AIML,A,300212,LAB2,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Thursday,11:00,TY AIML,A,300212,LAB2,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Friday,09:00,TY AIML,A,300212,101,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Friday,10:00,TY AIML,A,300212,101,2025-01-01,2025-06-30
+amar.dighe@ritppune.com,Friday,11:00,TY AIML,A,300212,102,2025-01-01,2025-06-30

@@ -1,0 +1,410 @@
+import { supabase } from '@/integrations/supabase/client';
+import { SecurityValidator, SecureLogger } from '@/utils/security';
+
+export interface AttendanceSession {
+  id: string;
+  class_id: string;
+  subject_id: string;
+  faculty_id: string;
+  date: string;
+  start_time: string;
+  is_substitution: boolean;
+  batch_id?: string | null;
+  created_at: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  session_id: string;
+  student_id: string;
+  status: 'PRESENT' | 'ABSENT';
+  remark: string | null;
+  created_at: string;
+  is_admin_override?: boolean;
+  modified_by?: string;
+  modified_at?: string;
+}
+
+export async function getAttendanceSessions(filters?: {
+  class_id?: string;
+  subject_id?: string;
+  faculty_id?: string;
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  let query = supabase
+    .from('attendance_sessions')
+    .select(`
+      *,
+      classes (id, name, division),
+      subjects (id, name, subject_code),
+      faculty (id, profiles (name))
+    `)
+    .order('date', { ascending: false })
+    .order('start_time', { ascending: false });
+
+  if (filters?.class_id) query = query.eq('class_id', filters.class_id);
+  if (filters?.subject_id) query = query.eq('subject_id', filters.subject_id);
+  if (filters?.faculty_id) query = query.eq('faculty_id', filters.faculty_id);
+  if (filters?.date) query = query.eq('date', filters.date);
+  if (filters?.dateFrom) query = query.gte('date', filters.dateFrom);
+  if (filters?.dateTo) query = query.lte('date', filters.dateTo);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message || 'Failed to fetch attendance sessions');
+  return data;
+}
+
+export async function getAttendanceRecords(sessionId: string) {
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select(`
+      *,
+      students (id, name, roll_no, enrollment_no)
+    `)
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error(error.message || 'Failed to fetch attendance records');
+  return data;
+}
+
+export async function createAttendanceSession(session: {
+  class_id: string;
+  subject_id: string;
+  faculty_id: string;
+  date: string;
+  start_time: string;
+  is_substitution?: boolean;
+  batch_id?: string | null;
+}) {
+  try {
+    // Validate required fields
+    if (!SecurityValidator.isValidUUID(session.class_id)) {
+      throw new Error('Invalid class ID');
+    }
+    if (!SecurityValidator.isValidUUID(session.subject_id)) {
+      throw new Error('Invalid subject ID');
+    }
+    if (!SecurityValidator.isValidUUID(session.faculty_id)) {
+      throw new Error('Invalid faculty ID');
+    }
+    if (!SecurityValidator.isValidDate(session.date)) {
+      throw new Error('Invalid date format');
+    }
+    if (!SecurityValidator.isValidTime(session.start_time)) {
+      throw new Error('Invalid time format');
+    }
+    
+    // Check if session already exists for this combination
+    const { data: existing } = await supabase
+      .from('attendance_sessions')
+      .select('id')
+      .eq('class_id', session.class_id)
+      .eq('subject_id', session.subject_id)
+      .eq('date', session.date)
+      .eq('start_time', session.start_time)
+      .maybeSingle();
+      
+    if (existing) {
+      throw new Error('Attendance session already exists for this time slot');
+    }
+
+    const { data, error } = await supabase
+      .from('attendance_sessions')
+      .insert(session)
+      .select()
+      .single();
+
+    if (error) {
+      SecureLogger.logError(error, 'createAttendanceSession');
+      throw new Error('Failed to create attendance session');
+    }
+    
+    return data;
+  } catch (error) {
+    SecureLogger.logError(error, 'createAttendanceSession');
+    throw error;
+  }
+}
+
+export async function createAttendanceRecords(records: {
+  session_id: string;
+  student_id: string;
+  status: 'PRESENT' | 'ABSENT';
+  remark?: string;
+}[]) {
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .insert(records)
+    .select();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateAttendanceRecord(id: string, updates: Partial<AttendanceRecord>) {
+  // Check if the current user is an admin to set the override flag
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  // Check role
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  const finalUpdates = {
+    ...updates,
+    ...(profile?.role === 'ADMIN' ? {
+      is_admin_override: true,
+      modified_by: user.id,
+      modified_at: new Date().toISOString()
+    } : {})
+  };
+
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .update(finalUpdates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getTodayAttendanceStats() {
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: sessions, error } = await supabase
+    .from('attendance_sessions')
+    .select('id')
+    .eq('date', today);
+
+  if (error) throw new Error(error.message || 'Failed to fetch today attendance sessions');
+
+  if (!sessions || sessions.length === 0) {
+    return { totalSessions: 0, totalPresent: 0, totalAbsent: 0, percentage: 0 };
+  }
+
+  const sessionIds = sessions.map(s => s.id);
+
+  const { data: records, error: recordsError } = await supabase
+    .from('attendance_records')
+    .select('status')
+    .in('session_id', sessionIds);
+
+  if (recordsError) throw new Error(recordsError.message || 'Failed to fetch attendance records');
+
+  const totalPresent = records?.filter(r => r.status === 'PRESENT').length || 0;
+  const totalAbsent = records?.filter(r => r.status === 'ABSENT').length || 0;
+  const total = totalPresent + totalAbsent;
+
+  return {
+    totalSessions: sessions.length,
+    totalPresent,
+    totalAbsent,
+    percentage: total > 0 ? Math.round((totalPresent / total) * 100) : 0
+  };
+}
+
+export async function getDefaulters(filters?: { class_id?: string; subject_id?: string }) {
+  // 1. Get students (filtered by class if provided)
+  let studentsQuery = supabase
+    .from('students')
+    .select('id, name, roll_no, class_id, classes(name, division)')
+    .eq('status', 'ACTIVE');
+
+  if (filters?.class_id) {
+    studentsQuery = studentsQuery.eq('class_id', filters.class_id);
+  }
+
+  const { data: students, error: studentsError } = await studentsQuery;
+  if (studentsError) throw studentsError;
+  if (!students || students.length === 0) return [];
+
+  // 2. Get sessions (filtered by class/subject)
+  let sessionsQuery = supabase
+    .from('attendance_sessions')
+    .select('id');
+
+  if (filters?.class_id) sessionsQuery = sessionsQuery.eq('class_id', filters.class_id);
+  if (filters?.subject_id) sessionsQuery = sessionsQuery.eq('subject_id', filters.subject_id);
+
+  const { data: sessions, error: sessionsError } = await sessionsQuery;
+  if (sessionsError) throw sessionsError;
+
+  const sessionIds = sessions?.map(s => s.id) || [];
+
+  // If no sessions, return 0% attendance (or 100%? usually 0 if no data, but here we want to show low attendance)
+  // Actually if no sessions, percentage is 0/0 = NaN. Let's say 0.
+  if (sessionIds.length === 0) return students.map(s => ({ ...s, percentage: 0, total: 0, present: 0, className: s.classes ? `${s.classes.name} ${s.classes.division}` : 'Unknown' }));
+
+  // 3. Get records for these sessions
+  const { data: records, error: recordsError } = await supabase
+    .from('attendance_records')
+    .select('student_id, status')
+    .in('session_id', sessionIds);
+
+  if (recordsError) throw recordsError;
+
+  // 4. Calculate stats
+  const stats = new Map<string, { present: number; total: number }>();
+  students.forEach(s => stats.set(s.id, { present: 0, total: 0 }));
+
+  records?.forEach(r => {
+    if (stats.has(r.student_id)) {
+      const s = stats.get(r.student_id)!;
+      s.total++;
+      if (r.status === 'PRESENT') s.present++;
+    }
+  });
+
+  // 5. Format and sort
+  const result = students.map(s => {
+    const stat = stats.get(s.id)!;
+    return {
+      ...s,
+      present: stat.present,
+      total: stat.total,
+      percentage: stat.total > 0 ? Math.round((stat.present / stat.total) * 100) : 0,
+      className: s.classes ? `${s.classes.name} ${s.classes.division}` : 'Unknown'
+    };
+  });
+
+  // Sort by percentage ascending (lowest attendance first)
+  return result.sort((a, b) => a.percentage - b.percentage);
+}
+
+// Get the last attendance session for a class-subject combination
+export async function getLastAttendanceSession(classId: string, subjectId: string) {
+  const { data, error } = await supabase
+    .from('attendance_sessions')
+    .select('id, date, start_time')
+    .eq('class_id', classId)
+    .eq('subject_id', subjectId)
+    .order('date', { ascending: false })
+    .order('start_time', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+// Get the last attendance session for a class on a specific date (for Copy functionality)
+export async function getLastClassAttendanceToday(classId: string, date: string, batchId?: string | null) {
+  let query = supabase
+    .from('attendance_sessions')
+    .select('id, date, start_time, subject:subjects(name)')
+    .eq('class_id', classId)
+    .eq('date', date)
+    .neq('start_time', new Date().toISOString().split('T')[1]?.substring(0, 5)) // Exclude current assumed time if possible, but safer to rely on ID check in UI
+    .order('start_time', { ascending: false })
+    .limit(1);
+
+  if (batchId) {
+    query = query.eq('batch_id', batchId);
+  } else {
+    // Logic: If looking for lecture attendance (Whole Class), find other sessions that were also Whole Class
+    // AND batch_id IS NULL
+    query = query.is('batch_id', null);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error && error.code !== 'PGRST116') throw error; // Ignore not found error
+  return data;
+}
+
+// Get attendance records with student info for a session
+export async function getAttendanceRecordsWithStatus(sessionId: string): Promise<Map<string, 'PRESENT' | 'ABSENT'>> {
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('student_id, status')
+    .eq('session_id', sessionId);
+
+  if (error) throw error;
+  
+  const statusMap = new Map<string, 'PRESENT' | 'ABSENT'>();
+  data?.forEach(record => {
+    statusMap.set(record.student_id, record.status as 'PRESENT' | 'ABSENT');
+  });
+  
+  return statusMap;
+}
+
+// Get recent absence count for students (last N sessions)
+export async function getRecentAbsencePatterns(classId: string, subjectId: string, lastNSessions: number = 5): Promise<Map<string, number>> {
+  // Get last N sessions
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('attendance_sessions')
+    .select('id')
+    .eq('class_id', classId)
+    .eq('subject_id', subjectId)
+    .order('date', { ascending: false })
+    .order('start_time', { ascending: false })
+    .limit(lastNSessions);
+
+  if (sessionsError) throw sessionsError;
+  if (!sessions || sessions.length === 0) return new Map();
+
+  const sessionIds = sessions.map(s => s.id);
+
+  // Get absence records
+  const { data: records, error: recordsError } = await supabase
+    .from('attendance_records')
+    .select('student_id, status')
+    .in('session_id', sessionIds)
+    .eq('status', 'ABSENT');
+
+  if (recordsError) throw recordsError;
+
+  // Count absences per student
+  const absenceCount = new Map<string, number>();
+  records?.forEach(r => {
+    absenceCount.set(r.student_id, (absenceCount.get(r.student_id) || 0) + 1);
+  });
+
+  return absenceCount;
+}
+
+export async function getMonthlySubjectAbsences(classId: string, subjectId: string): Promise<Map<string, number>> {
+  const date = new Date();
+  const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+
+  // Get sessions for this month
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('attendance_sessions')
+    .select('id')
+    .eq('class_id', classId)
+    .eq('subject_id', subjectId)
+    .gte('date', firstDay)
+    .lte('date', lastDay);
+
+  if (sessionsError) throw sessionsError;
+  if (!sessions || sessions.length === 0) return new Map();
+
+  const sessionIds = sessions.map(s => s.id);
+
+  // Get absence records
+  const { data: records, error: recordsError } = await supabase
+    .from('attendance_records')
+    .select('student_id')
+    .in('session_id', sessionIds)
+    .eq('status', 'ABSENT');
+
+  if (recordsError) throw recordsError;
+
+  // Count absences per student
+  const absenceCount = new Map<string, number>();
+  records?.forEach(r => {
+    absenceCount.set(r.student_id, (absenceCount.get(r.student_id) || 0) + 1);
+  });
+
+  return absenceCount;
+}
+

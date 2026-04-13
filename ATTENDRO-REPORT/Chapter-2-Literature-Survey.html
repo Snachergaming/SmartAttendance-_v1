@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 2 - Literature Survey</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+    <style>
+        /* Base Print Settings */
+        @page {
+            size: A4;
+            margin: 2.5cm 1.25cm 1.25cm 3.5cm;
+        }
+
+        /* Screen Preview Mode */
+        body {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 12pt;
+            line-height: 2;
+            text-align: justify;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: black;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            background-color: white;
+            width: 210mm;
+            min-height: 297mm;
+            padding: 2.5cm 1.25cm 1.25cm 3.5cm; /* Match print margins */
+            box-sizing: border-box;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        /* Print Mode Overrides */
+        @media print {
+            body {
+                background: none;
+                padding: 0;
+                display: block;
+            }
+            .container {
+                box-shadow: none;
+                margin: 0;
+                width: auto;
+                min-height: auto;
+                padding: 0;
+            }
+            .controls, .btn, .download-btn-sm {
+                display: none !important;
+            }
+        }
+
+        /* Typography Rules */
+        h1.chapter-title {
+            font-size: 14pt;
+            text-transform: uppercase;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 24pt;
+            margin-top: 0;
+            page-break-before: always;
+        }
+
+        h2.section-heading {
+            font-size: 12pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 18pt;
+            margin-bottom: 12pt;
+            text-align: left;
+        }
+
+        h3.subsection-heading {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-top: 12pt;
+            margin-bottom: 6pt;
+            text-align: left;
+        }
+
+        p, li {
+            font-size: 12pt;
+            margin-bottom: 12pt;
+        }
+
+        ul, ol {
+            margin-bottom: 12pt;
+            padding-left: 1cm;
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 11pt; /* Slightly smaller for table to fit */
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            vertical-align: top;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        /* Diagram Styles */
+        .figure-container {
+            text-align: center;
+            margin: 24pt 0;
+            page-break-inside: avoid;
+        }
+        .figure-caption {
+            font-weight: bold;
+            margin-top: 10pt;
+            font-style: italic;
+        }
+        .download-btn-sm {
+            display: inline-block;
+            margin-top: 5px;
+            padding: 5px 10px;
+            background: #6c757d;
+            color: white;
+            font-family: sans-serif;
+            font-size: 10px;
+            text-decoration: none;
+            border-radius: 3px;
+            cursor: pointer;
+            border: none;
+        }
+        .mermaid {
+            background: white; 
+        }
+
+        /* Screen Wrapper */
+        .screen-wrapper {
+            max-width: 210mm;
+            margin: 20px auto;
+            padding: 2.5cm 1.25cm 1.25cm 3.5cm;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            background: white;
+            box-sizing: border-box; 
+        }
+        
+        /* Controls */
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            font-family: sans-serif;
+            font-size: 14px;
+        }
+        .btn:hover { background-color: #0056b3; }
+        .btn-doc { background-color: #28a745; }
+        .btn-doc:hover { background-color: #218838; }
+
+        @media print {
+            .controls, .download-btn-sm { display: none; }
+            .screen-wrapper {
+                box-shadow: none;
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                max-width: none;
+            }
+            body { background: white; }
+            @page {
+                size: A4;
+                margin-top: 2.5cm;
+                margin-bottom: 1.25cm;
+                margin-left: 3.5cm;
+                margin-right: 1.25cm;
+            }
+        }
+    </style>
+    <script>
+        function downloadDoc() {
+            var content = document.querySelector('.container').innerHTML;
+            content = content.replace(/<button class="download-btn-sm".*?<\/button>/g, "");
+            
+            var header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' "+
+                 "xmlns:w='urn:schemas-microsoft-com:office:word' "+
+                 "xmlns='http://www.w3.org/TR/REC-html40'>"+
+                 "<head><meta charset='utf-8'><title>Chapter 2</title></head><body>";
+            var footer = "</body></html>";
+            
+            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(header + content + footer);
+            var fileDownload = document.createElement("a");
+            document.body.appendChild(fileDownload);
+            fileDownload.href = source;
+            fileDownload.download = 'Chapter-2-Literature-Survey.doc';
+            fileDownload.click();
+            document.body.removeChild(fileDownload);
+        }
+
+        async function downloadDiagram(id, filename) {
+            const element = document.getElementById(id);
+            if(!element.querySelector('svg')) {
+                alert("Please wait for diagram to render.");
+                return;
+            }
+            const svgData = new XMLSerializer().serializeToString(element.querySelector('svg'));
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            const img = new Image();
+            
+            const svgSize = element.querySelector('svg').getBoundingClientRect();
+            canvas.width = svgSize.width * 2; 
+            canvas.height = svgSize.height * 2;
+            
+            img.onload = function() {
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const pngFile = canvas.toDataURL("image/png");
+                
+                const downloadLink = document.createElement("a");
+                downloadLink.download = filename;
+                downloadLink.href = pngFile;
+                downloadLink.click();
+            };
+            img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+        }
+    </script>
+</head>
+<body>
+
+    <div class="controls">
+        <button onclick="window.print()" class="btn">Download / Print PDF</button>
+        <button onclick="downloadDoc()" class="btn btn-doc">Download DOC</button>
+    </div>
+
+    <div class="screen-wrapper">
+        <div class="container">
+            
+            <h1 class="chapter-title">CHAPTER–2 LITERATURE SURVEY</h1>
+            
+            <h2 class="section-heading">2.1 INTRODUCTION</h2>
+            <p>
+                The primary purpose of this literature survey is to investigate the evolution of attendance management technologies and to identify the specific shortcomings that persist in modern educational institutes. Attendance is not merely a record of physical presence; it is a fundamental metric of student engagement and academic discipline. As institutes like the Rajarambapu Institute of Technology transition towards outcome-based education (OBE), the integrity of attendance data becomes paramount.
+            </p>
+            <p>
+                This chapter reviews the progression from traditional manual registers to sophisticated IoT-based solutions. It analyses existing systems based on parameters such as security (prevention of proxy), efficiency (time taken), and infrastructure requirements. By studying related works and technical papers, this survey aims to define the precise "Research Gap" that the <strong>Attendro</strong> project seeks to address.
+            </p>
+
+            <h2 class="section-heading">2.2 EVOLUTION OF ATTENDANCE SYSTEMS</h2>
+            <p>
+                The domain of attendance automation has witnessed several generations of technological intervention. These can be broadly categorised into four phases:
+            </p>
+
+            <div class="figure-container" id="fig2_1">
+                <div class="mermaid">
+                    graph LR
+                    A[Generation 1<br>Manual Registers] -->|High Time cost| B[Generation 2<br>RFID/ID Cards]
+                    B -->|Proxy Issue| C[Generation 3<br>Fixed Biometric]
+                    C -->|Infrastructure Cost| D[Generation 4<br>Portable IoT]
+                    style D stroke:#333,stroke-width:4px
+                </div>
+                <div class="figure-caption">Figure 2.1: Evolution of Attendance Technologies</div>
+                <button class="download-btn-sm" onclick="downloadDiagram('fig2_1', 'Figure_2_1.png')">Download PNG</button>
+            </div>
+
+            <h3 class="subsection-heading">2.2.1 Paper-Based Manual Systems</h3>
+            <p>
+                The traditional method involves faculty calling out rollout numbers or students signing a muster sheet. While this requires zero technological investment, it is highly prone to human error and manipulation. "Buddy signing"—where one student forges signatures for absent friends—is a common phenomenon. Furthermore, the subsequent data entry of these physical records into computer systems is laborious and delayed.
+            </p>
+
+            <h3 class="subsection-heading">2.2.2 Radio Frequency Identification (RFID)</h3>
+            <p>
+                In the early 2000s, many institutes adopted RFID card-based systems. Students would tap their ID cards on a reader to enter the campus. While much faster than manual rolls, RFID systems failed to verify identity. Possession of the card was equated with the presence of the student. Consequently, students could simply carry multiple cards to punch in for their friends, rendering the system ineffective for strict attendance control.
+            </p>
+
+            <h3 class="subsection-heading">2.2.3 Fixed Biometric Systems</h3>
+            <p>
+                Biometrics (fingerprint and face recognition) solved the issue of identity verification. However, standard implementations involve wall-mounted devices at the institute entrance or in specific labs. This creates a "Queuing Bottleneck," where students waste time standing in line. More critically, these systems lack "Session Context". A student might punch in at the main gate but skip the actual lecture, creating a discrepancy between 'campus data' and 'classroom data'.
+            </p>
+
+            <h2 class="section-heading">2.3 REVIEW OF RELATED TECHNOLOGIES</h2>
+            <p>
+                To build a solution that is both portable and secure, an analysis of enabling technologies was conducted.
+            </p>
+            
+            <h3 class="subsection-heading">2.3.1 Microcontroller Platforms: ESP32 vs. Arduino</h3>
+            <p>
+                Early IoT projects relied on the Arduino Uno (ATmega328P). However, literature suggests that the <strong>ESP32</strong> is superior for connected applications. It features a dual-core Tensilica Xtensa LX6 microprocessor and integrated Wi-Fi/Bluetooth. This integration allows the Attendro device to communicate directly with cloud servers without external modules, significantly reducing the form factor and power consumption crucial for a portable device.
+            </p>
+
+            <h3 class="subsection-heading">2.3.2 Biometric Sensors</h3>
+            <p>
+                The survey compared Optical (R307) and Capacitive sensors. Optical sensors capture an image of the fingerprint ridges using visible light. Research indicates that while capacitive sensors are slimmer (used in phones), optical sensors like the R307 are more durable for high-volume scanning (hundreds of students) and are less susceptible to damage from static electricity or rough usage in a classroom environment.
+            </p>
+
+            <h2 class="section-heading">2.4 REVIEW OF KEY RESEARCH PAPERS</h2>
+            <p>
+                Specific studies relevant to the design of Attendro were analysed to understand the current state-of-the-art:
+            </p>
+            <ul>
+                <li>
+                    <strong>Tambade et al. [3]</strong> proposed a "Portable Biometric Attendance Management System" which highlighted the necessity of mobility in attendance tracking. Their work demonstrated the feasibility of handheld units but relied on local storage (SD cards) which delayed data synchronisation. Attendro improves upon this by using real-time cloud uploading.
+                </li>
+                <li>
+                    <strong>Khan et al. [2]</strong> in "Biometric Attendance System Based on Cloud Computing" emphasised the scalability of cloud databases over local servers. Their model showed that centralized data management reduces redundancy. However, their proposed system was designed for static office environments rather than dynamic classrooms.
+                </li>
+                <li>
+                    <strong>Baskar et al. [1]</strong> explored an "IoT Based Biometric Attendance System" utilizing Wi-Fi modules. While effective, their system lacked a rigorous "Session Control" mechanism, meaning the device was always active, potentially allowing students to mark attendance outside of lecture hours.
+                </li>
+            </ul>
+
+            <h2 class="section-heading">2.5 COMPARATIVE ANALYSIS OF EXISTING METHODS</h2>
+            <p>
+                A comparative study of various methodologies proposed in recent years highlights the trade-offs between security, cost, and usability.
+            </p>
+
+            <table>
+                <tr>
+                    <th>Methodology</th>
+                    <th>Technology Used</th>
+                    <th>Major Drawback Identified</th>
+                </tr>
+                <tr>
+                    <td>Automated Roll Call</td>
+                    <td>Paper / Excel</td>
+                    <td>High time consumption (10-15 mins); No digital verification.</td>
+                </tr>
+                <tr>
+                    <td>Smart Card Entry</td>
+                    <td>RFID / NFC</td>
+                    <td>"Buddy Punching" (Card swapping); No biometric proof.</td>
+                </tr>
+                <tr>
+                    <td>Mobile GPS/QR</td>
+                    <td>Android App</td>
+                    <td>GPS spoofing apps allow fake locations; QR codes can be shared via WhatsApp.</td>
+                </tr>
+                <tr>
+                    <td>Fixed Biometric</td>
+                    <td>Wall-mounted Terminals</td>
+                    <td>Expensive wiring; No distinction between Lecture A and Lecture B.</td>
+                </tr>
+            </table>
+
+            <h2 class="section-heading">2.6 RESEARCH GAP AND DEFINITION OF PROBLEM STATEMENT</h2>
+            <p>
+                The literature reveals a clear dichotomy: systems are either highly secure but rigid (Wall Biometrics) or highly flexible but insecure (Mobile Apps/QR).
+            </p>
+            <p>
+                <strong>The Gap:</strong> There is a lack of a low-cost system that combines <strong>Biometric Security</strong> with <strong>Portability</strong> and <strong>Session-Specific Control</strong>. Most portable solutions rely on smartphones (which have privacy concerns for students) rather than dedicated institutional hardware.
+            </p>
+            <p>
+                Therefore, the defined problem statement for this project is: <em>"To eliminate proxy attendance and automate data collection by designing a portable, teacher-controlled biometric device that validates student presence specifically for the duration of a lecture session."</em>
+            </p>
+
+            <div class="figure-container" id="fig2_2">
+                <div class="mermaid">
+                    graph TB
+                    subgraph High_Security [High Security]
+                        direction LR
+                        Q2(Fixed Biometric<br>High Security, Low Portability) --- Q1(<b>ATTENDRO</b><br>High Security, High Portability)
+                    end
+                    subgraph Low_Security [Low Security]
+                        direction LR
+                        Q3(Manual Registers<br>Low Security, Low Portability) --- Q4(Mobile QR/GPS<br>Low Security, High Portability)
+                    end
+                    style Q1 fill:#90EE90,stroke:#333,stroke-width:2px
+                    style Q2 fill:#ffcccc,stroke:#333
+                    style Q3 fill:#ffcccc,stroke:#333
+                    style Q4 fill:#ffcccc,stroke:#333
+                </div>
+                <div class="figure-caption">Figure 2.2: Positioning of Attendro (High Security + High Portability)</div>
+                <button class="download-btn-sm" onclick="downloadDiagram('fig2_2', 'Figure_2_2.png')">Download PNG</button>
+            </div>
+
+            <h2 class="section-heading">2.7 CHAPTER SUMMARY</h2>
+            <p>
+                This chapter surveyed the landscape of attendance management systems. It established that while biometrics offer the best security against proxy attendance, current fixed implementations are ill-suited for the dynamic schedule of a polytechnic institute. The synthesis of this literature confirms that employing an ESP32-based portable unit with session-logic is a novel and necessary intervention. The next chapter will detail the System Design and Architecture derived from these findings.
+            </p>
+
+        </div>
+    </div>
+</body>
+</html>

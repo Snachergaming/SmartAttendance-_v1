@@ -1,0 +1,474 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Plus, Search, BookOpen, Edit2, Check, X, Trash2, Download, Upload, RefreshCw, Copy } from 'lucide-react';
+import PageShell from '@/components/layout/PageShell';
+import DataTable from '@/components/ui/DataTable';
+import StatusBadge from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from '@/hooks/use-toast';
+import { getSubjects, createSubject, updateSubject, deleteSubject, type Subject } from '@/services/subjects';
+import { downloadTemplate } from '@/utils/export';
+import { Checkbox } from '@/components/ui/checkbox';
+
+const AdminSubjectsPage: React.FC = () => {
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [yearFilter, setYearFilter] = useState('all');
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [subjectToDelete, setSubjectToDelete] = useState<Subject | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [formData, setFormData] = useState({
+    subject_code: '',
+    name: '',
+    semester: 1,
+    year: 1,
+    department: 'Smart Attendance',
+    type: 'TH' as 'TH' | 'PR' | 'TU',
+    weekly_lectures: 3,
+    status: 'Active',
+  });
+  const [createBothTypes, setCreateBothTypes] = useState(false); // Create both TH and PR versions
+
+  const fetchData = async () => {
+    try {
+      const data = await getSubjects();
+      setSubjects(data);
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+      toast({ title: 'Error', description: 'Failed to load subjects', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const filteredSubjects = subjects.filter((s) => {
+    const matchesSearch =
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.subject_code.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesYear = yearFilter === 'all' || s.year.toString() === yearFilter;
+    return matchesSearch && matchesYear;
+  });
+
+  const resetForm = () => {
+    setFormData({
+      subject_code: '',
+      name: '',
+      semester: 1,
+      year: 1,
+      department: 'Smart Attendance',
+      type: 'TH',
+      weekly_lectures: 3,
+      status: 'Active',
+    });
+    setEditingSubject(null);
+    setCreateBothTypes(false);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      if (editingSubject) {
+        await updateSubject(editingSubject.id, formData);
+        toast({ title: 'Success', description: 'Subject updated successfully' });
+      } else if (createBothTypes) {
+        // Create both TH and PR versions
+        const baseCode = formData.subject_code.replace(/-(TH|PR|TU)$/i, ''); // Remove any existing suffix
+        const baseName = formData.name.replace(/\s*(Theory|Practical|Tutorial)$/i, ''); // Remove any existing suffix
+        
+        // Create Theory version
+        await createSubject({
+          ...formData,
+          subject_code: `${baseCode}-TH`,
+          name: `${baseName} (Theory)`,
+          type: 'TH',
+          weekly_lectures: formData.weekly_lectures,
+        });
+        
+        // Create Practical version
+        await createSubject({
+          ...formData,
+          subject_code: `${baseCode}-PR`,
+          name: `${baseName} (Practical)`,
+          type: 'PR',
+          weekly_lectures: 2, // Practicals usually have 2 hours
+        });
+        
+        toast({ title: 'Success', description: 'Created both Theory and Practical subjects' });
+      } else {
+        await createSubject(formData);
+        toast({ title: 'Success', description: 'Subject created successfully' });
+      }
+      setIsAddDialogOpen(false);
+      resetForm();
+      fetchData();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to save subject', variant: 'destructive' });
+    }
+  };
+
+  const handleEdit = (s: Subject) => {
+    setEditingSubject(s);
+    setFormData({
+      subject_code: s.subject_code,
+      name: s.name,
+      semester: s.semester,
+      year: s.year,
+      department: s.department || 'Smart Attendance',
+      type: s.type,
+      weekly_lectures: s.weekly_lectures,
+      status: s.status,
+    });
+    setIsAddDialogOpen(true);
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+
+      const codeIdx = headers.indexOf('subject_code');
+      const nameIdx = headers.indexOf('name');
+      const semIdx = headers.indexOf('semester');
+      const yearIdx = headers.indexOf('year');
+      const typeIdx = headers.indexOf('type');
+      const lecturesIdx = headers.indexOf('weekly_lectures');
+
+      if (codeIdx === -1 || nameIdx === -1) {
+        toast({ title: 'Error', description: 'CSV must have subject_code and name columns', variant: 'destructive' });
+        return;
+      }
+
+      let success = 0;
+      let failed = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        if (values.length < headers.length) continue;
+
+        try {
+          await createSubject({
+            subject_code: values[codeIdx],
+            name: values[nameIdx],
+            semester: semIdx !== -1 ? parseInt(values[semIdx]) || 1 : 1,
+            year: yearIdx !== -1 ? parseInt(values[yearIdx]) || 1 : 1,
+            department: 'Smart Attendance',
+            type: (typeIdx !== -1 && values[typeIdx] === 'PR') ? 'PR' : 'TH',
+            weekly_lectures: lecturesIdx !== -1 ? parseInt(values[lecturesIdx]) || 3 : 3,
+            status: 'Active',
+          });
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+
+      toast({ title: 'Import Complete', description: `${success} added, ${failed} failed` });
+      setTimeout(() => fetchData(), 1000);
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDeleteClick = (s: Subject) => {
+    setSubjectToDelete(s);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!subjectToDelete) return;
+
+    try {
+      await deleteSubject(subjectToDelete.id);
+      toast({ title: 'Success', description: 'Subject deleted successfully' });
+      setDeleteConfirmOpen(false);
+      setSubjectToDelete(null);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting subject:', error);
+      toast({ title: 'Error', description: 'Failed to delete subject', variant: 'destructive' });
+    }
+  };
+
+  const columns = [
+    { key: 'subject_code', header: 'Code' },
+    {
+      key: 'name',
+      header: 'Subject Name',
+      render: (s: Subject) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+            <BookOpen className="w-4 h-4 text-primary" />
+          </div>
+          <span className="font-medium text-foreground">{s.name}</span>
+        </div>
+      ),
+    },
+    { key: 'year', header: 'Year' },
+    { key: 'semester', header: 'Sem' },
+    {
+      key: 'type',
+      header: 'Type',
+      render: (s: Subject) => (
+        <StatusBadge variant={s.type === 'TH' ? 'default' : s.type === 'PR' ? 'info' : 'warning'}>
+          {s.type}
+        </StatusBadge>
+      ),
+    },
+    { key: 'weekly_lectures', header: 'Weekly' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (s: Subject) => (
+        <StatusBadge variant={s.status === 'Active' ? 'success' : 'outline'}>
+          {s.status}
+        </StatusBadge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (s: Subject) => (
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={() => handleEdit(s)} title="Edit Subject">
+            <Edit2 className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(s)} title="Delete Subject" className="text-red-500 hover:text-red-700">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <PageShell role="admin">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">Subjects</h1>
+            <p className="text-muted-foreground mt-1">Manage subjects and their syllabus (click 📄 icon to manage syllabus)</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => downloadTemplate('subjects')}>
+              <Download className="w-4 h-4 mr-2" />
+              Template
+            </Button>
+            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImportCSV}
+            />
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" />
+              Import CSV
+            </Button>
+            <Dialog open={isAddDialogOpen} onOpenChange={(open) => { setIsAddDialogOpen(open); if (!open) resetForm(); }}>
+              <DialogTrigger asChild>
+                <Button className="btn-gradient">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Subject
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="glass-card border-border/50">
+                <DialogHeader>
+                  <DialogTitle>{editingSubject ? 'Edit Subject' : 'Add New Subject'}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Subject Code</Label>
+                      <Input
+                        value={formData.subject_code}
+                        onChange={(e) => setFormData({ ...formData, subject_code: e.target.value })}
+                        placeholder={createBothTypes ? "CS101 (will add -TH and -PR)" : "CS101"}
+                        className="bg-white/5 border-border/50"
+                      />
+                    </div>
+                    <div>
+                      <Label>Type</Label>
+                      <Select 
+                        value={formData.type} 
+                        onValueChange={(v) => setFormData({ ...formData, type: v as 'TH' | 'PR' | 'TU' })}
+                        disabled={createBothTypes}
+                      >
+                        <SelectTrigger className="bg-white/5 border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TH">Theory</SelectItem>
+                          <SelectItem value="PR">Practical</SelectItem>
+                          <SelectItem value="TU">Tutorial</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {/* Create Both TH and PR Checkbox */}
+                  {!editingSubject && (
+                    <label className="flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
+                      <Checkbox 
+                        checked={createBothTypes} 
+                        onCheckedChange={(checked) => setCreateBothTypes(checked === true)}
+                      />
+                      <div>
+                        <span className="font-medium text-foreground">Create both Theory (TH) and Practical (PR)</span>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Automatically creates two entries: {formData.subject_code || 'CODE'}-TH and {formData.subject_code || 'CODE'}-PR
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                  
+                  <div>
+                    <Label>Subject Name</Label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder={createBothTypes ? "Introduction to AI (will add Theory/Practical)" : "Introduction to AI"}
+                      className="bg-white/5 border-border/50"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>Year</Label>
+                      <Select value={formData.year.toString()} onValueChange={(v) => {
+                        const year = parseInt(v);
+                        // Auto-adjust semester based on year
+                        const validSemesters: Record<number, number[]> = { 1: [1, 2], 2: [3, 4], 3: [5, 6] };
+                        const newSemester = validSemesters[year]?.[0] || 1;
+                        setFormData({ ...formData, year, semester: newSemester });
+                      }}>
+                        <SelectTrigger className="bg-white/5 border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1st Year</SelectItem>
+                          <SelectItem value="2">2nd Year</SelectItem>
+                          <SelectItem value="3">3rd Year</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Semester</Label>
+                      <Select value={formData.semester.toString()} onValueChange={(v) => {
+                        const semester = parseInt(v);
+                        // Auto-adjust year based on semester
+                        const yearForSem = semester <= 2 ? 1 : semester <= 4 ? 2 : 3;
+                        setFormData({ ...formData, semester, year: yearForSem });
+                      }}>
+                        <SelectTrigger className="bg-white/5 border-border/50"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(() => {
+                            const validSemesters: Record<number, number[]> = { 1: [1, 2], 2: [3, 4], 3: [5, 6] };
+                            return (validSemesters[formData.year] || [1, 2]).map((s) => (
+                              <SelectItem key={s} value={s.toString()}>Sem {s}</SelectItem>
+                            ));
+                          })()}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>{createBothTypes ? 'Weekly (TH)' : 'Weekly Lectures'}</Label>
+                      <Input
+                        type="number"
+                        value={formData.weekly_lectures}
+                        onChange={(e) => setFormData({ ...formData, weekly_lectures: parseInt(e.target.value) || 0 })}
+                        className="bg-white/5 border-border/50"
+                      />
+                      {createBothTypes && (
+                        <p className="text-xs text-muted-foreground mt-1">PR will default to 2 hours</p>
+                      )}
+                    </div>
+                  </div>
+                  <Button onClick={handleSubmit} className="w-full btn-gradient">
+                    {editingSubject ? 'Update Subject' : createBothTypes ? 'Create Both Subjects' : 'Create Subject'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or code..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-white/5 border-border/50"
+            />
+          </div>
+          <Select value={yearFilter} onValueChange={setYearFilter}>
+            <SelectTrigger className="w-full sm:w-40 bg-white/5 border-border/50">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              <SelectItem value="1">1st Year</SelectItem>
+              <SelectItem value="2">2nd Year</SelectItem>
+              <SelectItem value="3">3rd Year</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={filteredSubjects}
+          keyExtractor={(s) => s.id}
+          isLoading={loading}
+          emptyMessage="No subjects found"
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete Subject</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete <span className="font-semibold text-foreground">"{subjectToDelete?.name}"</span>?
+              </p>
+              <p className="text-xs text-red-500">
+                ⚠️ This action cannot be undone. All associated data will be removed.
+              </p>
+              <div className="flex gap-3 justify-end pt-4">
+                <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteConfirm}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Delete Subject
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </motion.div>
+    </PageShell>
+  );
+};
+
+export default AdminSubjectsPage;

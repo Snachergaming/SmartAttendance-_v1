@@ -1,0 +1,63 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+/* Reset */
+body { font-family: 'Times New Roman', serif; line-height: 1.5; text-align: justify; }
+h1, h2, h3 { text-align: center; }
+p { margin-bottom: 1em; }
+table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+th, td { border: 1px solid #000; padding: 5px; }
+.diagram-wrap { border: none !important; margin: 20px auto !important; width: 100% !important; }
+</style>
+</head>
+<body>
+<h1>Chapter–5 Designs, Working and Processes</h1>
+<h3>5.1 Hardware Design</h3>
+<ul>
+<li><strong>Controller:</strong> ESP32 DevKit V1 (Dual-core, Wi-Fi/BLE).</li>
+<li><strong>Biometric Sensor:</strong> R307 / Waveshare Optical Sensor (UART interface).</li>
+<li><strong>Display:</strong> SSD1306 I2C OLED (Visual feedback for students).</li>
+<li><strong>Power:</strong> Li-Ion Battery with TP4056 charging module.</li>
+</ul>
+<h3>5.2 Database Description (Supabase)</h3>
+<p>The database is normalized to ensure consistency:</p>
+<ul>
+<li><code>devices</code>: Stores <code>device_code</code>, <code>status</code>, and <code>last_seen_at</code>.</li>
+<li><code>lecture_sessions</code>: The core entity connecting <code>faculty_id</code>, <code>device_code</code>, <code>subject_id</code>, <code>class_id</code>, <code>batch_id</code>, and <code>session_token</code>.</li>
+<li><code>students</code>: Contains <code>roll_no</code>, <code>fingerprint_template</code> (optional), and mapping to multiple classes.</li>
+<li><code>attendance_records</code>: Use <code>session_id</code> and <code>roll_no</code> as unique composite keys to prevent duplicates.</li>
+<li><code>finger_templates</code>: Central repository for &quot;Enroll Once, Use Anywhere&quot;.</li>
+</ul>
+<h3>5.3 Session &amp; Context Rules (The Verification Logic)</h3>
+<p>A scan is only accepted if it passes the following <strong>Context Rules</strong>:</p>
+<ol>
+<li><strong>Time Window:</strong> <code>Current Time</code> must be between <code>session.start</code> and <code>session.end</code>.</li>
+<li><strong>Device Match:</strong> The provided <code>session_token</code> matches the device's current active session.</li>
+<li><strong>Batch Lock:</strong> If the session is for &quot;Batch A&quot; (e.g., Roll 1-20), a student with Roll 25 is rejected.</li>
+<li><strong>De-Duplication:</strong> Checks if <code>attendance_records</code> already contains this <code>roll_no</code> for this <code>session_id</code>.</li>
+</ol>
+<h3>5.4 Use Case Scenarios</h3>
+<p><strong>Scenario A: Normal Lecture</strong></p>
+<ol>
+<li>Faculty enters class, opens Web App.</li>
+<li>Selects &quot;Third Year&quot;, &quot;Data Structures&quot;, &quot;Theory&quot;.</li>
+<li>Clicks &quot;Start Session&quot;.</li>
+<li>Device beeps and shows &quot;Data Structures Active&quot;.</li>
+<li>Device is passed around; students scan.</li>
+<li>Faculty clicks &quot;End Session&quot;. Report is generated instantly.</li>
+</ol>
+<p><strong>Scenario B: No Internet</strong></p>
+<ol>
+<li>Session starts (while online or cached).</li>
+<li>Internet cuts out.</li>
+<li>Students continue scanning; device shows &quot;Saved Offline&quot;.</li>
+<li>Faculty returns to staff room (Wi-Fi restored).</li>
+<li>Device automatically flushes queue; server processes records.</li>
+</ol>
+<hr />
+
+</body>
+</html>

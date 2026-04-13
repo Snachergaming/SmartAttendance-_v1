@@ -1,0 +1,122 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HashRouter, Routes, Route } from "react-router-dom";
+import RouteGuard from "@/components/auth/RouteGuard";
+
+// Pages
+import AdminLogin from "./pages/AdminLogin";
+import FacultyLogin from "./pages/FacultyLogin";
+import NotFound from "./pages/NotFound";
+
+// Admin Pages
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminFaculty from "./pages/admin/Faculty";
+import AdminClasses from "./pages/admin/Classes";
+import AdminStudents from "./pages/admin/Students";
+import AdminSubjects from "./pages/admin/Subjects";
+import AdminAllocations from "./pages/admin/Allocations";
+import AdminTimetable from "./pages/admin/Timetable";
+import AdminFacultyLeave from "./pages/admin/FacultyLeave";
+import AdminAttendanceMonitor from "./pages/admin/AttendanceMonitor";
+import AdminLiveAttendanceMonitor from "./pages/admin/LiveAttendanceMonitor";
+import AdminFingerprintTest from "./pages/admin/FingerprintTest";
+import AdminEnrollmentSimulator from "./pages/admin/EnrollmentSimulator";
+import AdminDefaulters from "./pages/admin/Defaulters";
+import AdminFineManagement from "./pages/admin/FineManagement";
+import AdminPromotion from "./pages/admin/Promotion";
+import AdminReports from "./pages/admin/Reports";
+import AdminSettings from "./pages/admin/Settings";
+import AdminBatches from "./pages/admin/Batches";
+import AdminHolidays from "./pages/admin/Holidays";
+import AdminSubstitutions from "./pages/admin/Substitutions";
+import AdminDevices from "./pages/admin/Devices";
+import AdminStudentEnrollment from "./pages/admin/StudentEnrollment";
+import AdminQuickEnrollment from "./pages/admin/QuickEnrollment";
+
+// Faculty Pages
+import FacultyDashboard from "./pages/faculty/Dashboard";
+import FacultyToday from "./pages/faculty/Today";
+import FacultyAttendance from "./pages/faculty/Attendance";
+import FacultyAttendanceView from "./pages/faculty/AttendanceView";
+import FacultyLeave from "./pages/faculty/Leave";
+import FacultyReports from "./pages/faculty/Reports";
+import FacultySubjects from "./pages/faculty/Subjects";
+import FacultySettings from "./pages/faculty/Settings";
+import FacultyMyClass from "./pages/faculty/MyClass";
+import { useEffect } from "react";
+import { App as CapacitorApp } from "@capacitor/app";
+
+const queryClient = new QueryClient();
+
+const App = () => {
+  useEffect(() => {
+    CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (!canGoBack) {
+        CapacitorApp.exitApp();
+      } else {
+        window.history.back();
+      }
+    });
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <HashRouter>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<FacultyLogin />} />
+            <Route path="/login/admin" element={<AdminLogin />} />
+            <Route path="/login/faculty" element={<FacultyLogin />} />
+
+            {/* Admin routes */}
+            <Route path="/admin/dashboard" element={<RouteGuard allowedRole="ADMIN"><AdminDashboard /></RouteGuard>} />
+            <Route path="/admin/faculty" element={<RouteGuard allowedRole="ADMIN"><AdminFaculty /></RouteGuard>} />
+            <Route path="/admin/classes" element={<RouteGuard allowedRole="ADMIN"><AdminClasses /></RouteGuard>} />
+            <Route path="/admin/students" element={<RouteGuard allowedRole="ADMIN"><AdminStudents /></RouteGuard>} />
+            <Route path="/admin/subjects" element={<RouteGuard allowedRole="ADMIN"><AdminSubjects /></RouteGuard>} />
+            <Route path="/admin/allocations" element={<RouteGuard allowedRole="ADMIN"><AdminAllocations /></RouteGuard>} />
+            <Route path="/admin/timetable" element={<RouteGuard allowedRole="ADMIN"><AdminTimetable /></RouteGuard>} />
+            <Route path="/admin/faculty-leave" element={<RouteGuard allowedRole="ADMIN"><AdminFacultyLeave /></RouteGuard>} />
+            <Route path="/admin/attendance-monitor" element={<RouteGuard allowedRole="ADMIN"><AdminAttendanceMonitor /></RouteGuard>} />
+            <Route path="/admin/live-attendance" element={<RouteGuard allowedRole="ADMIN"><AdminLiveAttendanceMonitor /></RouteGuard>} />
+            <Route path="/admin/fingerprint-test" element={<RouteGuard allowedRole="ADMIN"><AdminFingerprintTest /></RouteGuard>} />
+            <Route path="/admin/enrollment-simulator" element={<RouteGuard allowedRole="ADMIN"><AdminEnrollmentSimulator /></RouteGuard>} />
+            <Route path="/admin/defaulters" element={<RouteGuard allowedRole="ADMIN"><AdminDefaulters /></RouteGuard>} />
+            <Route path="/admin/fines" element={<RouteGuard allowedRole="ADMIN"><AdminFineManagement /></RouteGuard>} />
+            <Route path="/admin/promotion" element={<RouteGuard allowedRole="ADMIN"><AdminPromotion /></RouteGuard>} />
+            <Route path="/admin/batches" element={<RouteGuard allowedRole="ADMIN"><AdminBatches /></RouteGuard>} />
+            <Route path="/admin/holidays" element={<RouteGuard allowedRole="ADMIN"><AdminHolidays /></RouteGuard>} />
+            <Route path="/admin/substitutions" element={<RouteGuard allowedRole="ADMIN"><AdminSubstitutions /></RouteGuard>} />
+            <Route path="/admin/devices" element={<RouteGuard allowedRole="ADMIN"><AdminDevices /></RouteGuard>} />
+            <Route path="/admin/enrollment" element={<RouteGuard allowedRole="ADMIN"><AdminStudentEnrollment /></RouteGuard>} />
+            <Route path="/admin/quick-enrollment" element={<RouteGuard allowedRole="ADMIN"><AdminQuickEnrollment /></RouteGuard>} />
+            <Route path="/admin/reports" element={<RouteGuard allowedRole="ADMIN"><AdminReports /></RouteGuard>} />
+            <Route path="/admin/settings" element={<RouteGuard allowedRole="ADMIN"><AdminSettings /></RouteGuard>} />
+
+            {/* Faculty routes */}
+            <Route path="/faculty/dashboard" element={<RouteGuard allowedRole="FACULTY"><FacultyDashboard /></RouteGuard>} />
+            <Route path="/faculty/today" element={<RouteGuard allowedRole="FACULTY"><FacultyToday /></RouteGuard>} />
+            <Route path="/faculty/my-class" element={<RouteGuard allowedRole="FACULTY"><FacultyMyClass /></RouteGuard>} />
+            <Route path="/faculty/attendance/:sessionId" element={<RouteGuard allowedRole="FACULTY"><FacultyAttendance /></RouteGuard>} />
+            <Route path="/faculty/attendance/:sessionId/view" element={<RouteGuard allowedRole="FACULTY"><FacultyAttendanceView /></RouteGuard>} />
+            <Route path="/faculty/leave" element={<RouteGuard allowedRole="FACULTY"><FacultyLeave /></RouteGuard>} />
+            <Route path="/faculty/reports" element={<RouteGuard allowedRole="FACULTY"><FacultyReports /></RouteGuard>} />
+            <Route path="/faculty/subjects" element={<RouteGuard allowedRole="FACULTY"><FacultySubjects /></RouteGuard>} />
+            <Route path="/faculty/batches" element={<RouteGuard allowedRole="FACULTY"><AdminBatches role="faculty" /></RouteGuard>} />
+            <Route path="/faculty/settings" element={<RouteGuard allowedRole="FACULTY"><FacultySettings /></RouteGuard>} />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </HashRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
+
+export default App;

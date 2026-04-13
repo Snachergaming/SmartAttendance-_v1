@@ -1,0 +1,54 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+/* Reset */
+body { font-family: 'Times New Roman', serif; line-height: 1.5; text-align: justify; }
+h1, h2, h3 { text-align: center; }
+p { margin-bottom: 1em; }
+table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+th, td { border: 1px solid #000; padding: 5px; }
+.diagram-wrap { border: none !important; margin: 20px auto !important; width: 100% !important; }
+</style>
+</head>
+<body>
+<h1>Chapter–3 Scope of the Project</h1>
+<h3>3.1 Overview</h3>
+<p>The project scope covers the end-to-end development of hardware, firmware, cloud infrastructure, and a web application.</p>
+<h3>3.2 In-Scope Deliverables</h3>
+<ol>
+<li><strong>Portable Device Firmware (ESP32):</strong>
+<ul>
+<li>Wi-Fi connectivity and Session Polling.</li>
+<li>Fingerprint acquisition and Template generation.</li>
+<li>Local Rule Engine (Context checks).</li>
+<li>Offline Queue Management and Synchronization logic.</li>
+</ul>
+</li>
+<li><strong>Central Cloud (Supabase):</strong>
+<ul>
+<li>SQL Schema for Users, Classes, and Attendance.</li>
+<li>Edge Functions for <code>start_session</code>, <code>mark_attendance</code>, and <code>sync_offline</code>.</li>
+<li>Row-Level Security (RLS) to protect flexible data.</li>
+</ul>
+</li>
+<li><strong>Faculty/Admin Web Interface:</strong>
+<ul>
+<li>Dashboard for Timetable and Analytics.</li>
+<li>Session Control (Start/End).</li>
+<li>Reporting Module (Defaulters, PDF Export).</li>
+</ul>
+</li>
+</ol>
+<h3>3.3 Out-of-Scope</h3>
+<ul>
+<li>Advanced face recognition or iris scanning.</li>
+<li>Payroll processing integration.</li>
+<li>Hardware enclosure manufacturing (prototype uses acrylic/3D print case).</li>
+</ul>
+<hr />
+
+</body>
+</html>
