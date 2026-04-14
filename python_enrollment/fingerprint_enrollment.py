@@ -13,6 +13,10 @@ import serial.tools.list_ports
 from typing import Optional, Tuple
 import requests
 import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Try to import GUI libraries
 try:
@@ -24,9 +28,9 @@ except ImportError:
     print("Note: tkinter not available, running in CLI mode")
 
 # Configuration - Update these values
-SUPABASE_URL = "https://gphcfejuurygcetmtpec.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwaGNmZWp1dXJ5Z2NldG10cGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3ODM0ODAsImV4cCI6MjA4MDM1OTQ4MH0.NrHmxfRMW3E2SdiMEfNwbozGG36xpG1jroQB0dy3s5E"
-SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwaGNmZWp1dXJ5Z2NldG10cGVjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDc4MzQ4MCwiZXhwIjoyMDgwMzU5NDgwfQ.EuzI5mIV6nu5H6mC3QYkQsbmdkqLEXuWIZlf2oiqZ7g"
+SUPABASE_URL = os.getenv("SUPABASE_URL_1", "https://gphcfejuurygcetmtpec.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY_1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwaGNmZWp1dXJ5Z2NldG10cGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3ODM0ODAsImV4cCI6MjA4MDM1OTQ4MH0.NrHmxfRMW3E2SdiMEfNwbozGG36xpG1jroQB0dy3s5E")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY_1")
 
 # R307 Commands
 R307_HEADER = bytes([0xEF, 0x01])

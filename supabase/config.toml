@@ -42,11 +42,14 @@ enable_confirmations = false
 [functions.assign-substitute]
 verify_jwt = true
 
-[functions.generate-defaulter]
+[functions.create-class]
 verify_jwt = true
 
-[functions.ai-summary]
+[functions.create-faculty]
+verify_jwt = true
+
+[functions.device-api]
 verify_jwt = true
 
 [functions.update-faculty-password]
-verify_jwt = false
+verify_jwt = true

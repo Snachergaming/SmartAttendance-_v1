@@ -36,8 +36,8 @@ const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // Supabase Settings
 const char* SUPABASE_URL = "https://gphcfejuurygcetmtpec.supabase.co";
-const char* SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwaGNmZWp1dXJ5Z2NldG10cGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3ODM0ODAsImV4cCI6MjA4MDM1OTQ4MH0.NrHmxfRMW3E2SdiMEfNwbozGG36xpG1jroQB0dy3s5E";
-const char* SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwaGNmZWp1dXJ5Z2NldG10cGVjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDc4MzQ4MCwiZXhwIjoyMDgwMzU5NDgwfQ.EuzI5mIV6nu5H6mC3QYkQsbmdkqLEXuWIZlf2oiqZ7g";
+const char* SUPABASE_KEY = SUPABASE_ANON_KEY;
+const char* SUPABASE_SERVICE_KEY = SUPABASE_SERVICE_KEY;
 
 // Device Settings
 const char* DEVICE_CODE = "DEVICE_001";
