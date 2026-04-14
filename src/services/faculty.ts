@@ -109,9 +109,12 @@ export async function updateFaculty(id: string, updates: Partial<Pick<Faculty, '
 export async function updateFacultyPassword(profile_id: string, new_password: string) {
   try {
     const { data, error } = await supabase.functions.invoke('update-faculty-password', {
-      body: {
+      body: JSON.stringify({
         profile_id,
         new_password,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
       },
     });
 
@@ -165,9 +168,12 @@ export async function updateFacultyPasswordsToMobile() {
 
         // Use the update-faculty-password edge function to update password
         const { data, error } = await supabase.functions.invoke('update-faculty-password', {
-          body: {
+          body: JSON.stringify({
             profile_id: faculty.profile_id,
             new_password: mobile,
+          }),
+          headers: {
+            'Content-Type': 'application/json',
           },
         });
 
