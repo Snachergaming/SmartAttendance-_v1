@@ -73,6 +73,18 @@ const AdminFacultyPage: React.FC = () => {
     );
   });
 
+  const getFunctionHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('No valid admin session. Please log in again.');
+    }
+
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    };
+  };
+
   const handleAddFaculty = async () => {
     if (!newFaculty.name || !newFaculty.email || !newFaculty.password) {
       toast({ title: 'Error', description: 'Name, email and password are required', variant: 'destructive' });
@@ -86,6 +98,7 @@ const AdminFacultyPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      const headers = await getFunctionHeaders();
       const response = await supabase.functions.invoke('create-faculty', {
         body: JSON.stringify({
           name: newFaculty.name,
@@ -94,9 +107,7 @@ const AdminFacultyPage: React.FC = () => {
           employee_code: newFaculty.employee_code,
           designation: newFaculty.designation,
         }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (response.error) {
@@ -129,6 +140,13 @@ const AdminFacultyPage: React.FC = () => {
     } catch (error: unknown) {
       console.error('Error adding faculty:', error);
       const message = error instanceof Error ? error.message : 'Failed to add faculty';
+
+      if (message.includes('Invalid JWT') || message.includes('expired') || message.includes('No valid admin session')) {
+        await supabase.auth.signOut().catch(() => {});
+        localStorage.clear();
+        window.location.href = '/login/admin';
+      }
+
       toast({
         title: 'Error',
         description: message.includes('Failed to send a request to the Edge Function')
@@ -208,6 +226,7 @@ const AdminFacultyPage: React.FC = () => {
 
         let success = 0;
         let failed = 0;
+        const functionHeaders = await getFunctionHeaders();
 
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
@@ -221,9 +240,7 @@ const AdminFacultyPage: React.FC = () => {
                 employee_code: empCodeIdx !== -1 ? values[empCodeIdx] : null,
                 designation: designationIdx !== -1 ? values[designationIdx] : null,
               }),
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers: functionHeaders,
             });
 
             if (response.error) {
